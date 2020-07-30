@@ -1,0 +1,370 @@
+---
+title: "Análise de Sobrevivência: Titanic"
+author: "Erick Araújo"
+date: 30/07/2020
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introdução
+  A análise de sobrevivência do Titanic é um projeto clássico no universo da Ciência de Dados. Proposto pelo [**Keagle**](https://www.kaggle.com/) em 2012, esse projeto tem um objetivo simples: Através de algumas ferramentas de Machine Learning, ajustar um modelo que prevê quais passageiros sobreviveram ao náufrago do Titanic.
+  Em 10 de abril de 1912, o Titanic desembarcava em sua viagem inaugural, de Southampton, ao sul do Reino Unido, para um dos maiores desastres marítimos da história. No dia 15 de Abril do mesmo ano, o navio afundou após colidir com um iceberg no Oceano Atlântico. O número insuficiente de botes salva-vidas, uma série de negligências cometidas, e outros fatores, culminaram na morte de 1502 dos 2224 passageiros e tripulantes.
+  Usando alguns dados dos passageiros, como: Nome; Idade; Sexo; Classe socioeconômica, e etc... Construiremos um modelo preditivo que respoda a seguinte pergunta: Que tipo de pessoa tem maior probabilidade de sobreviver ao náufrago do Titanic? 
+
+### Análise e Discussão
+  A plataforma Keagle disponibilizou um banco de dados dividido em duas partes chamadas train e test. A primeira parte, train, possui 891 observações e 12 variáveis, sendo elas:
+  
+  Survived (Sobreviveu): 0 = Não, 1 = Sim
+  
+  Pclass (Classe): Classe de ingresso 1 = 1º, 2 = 2º, 3 = 3º
+  
+  Sex (Sexo): Sexo do passageiro
+  
+  Age (Idade): Idade em anos
+  
+  Sibsp: Quantidade de irmãos / cônjuges a bordo do Titanic
+  
+  Parch: Quantidade de pais / crianças a bordo do Titanic
+  
+  Ticket (Bilhete): Número do bilhete de embarque
+  
+  Fare (Tarifa): Tarifa paga pelo Passageiro
+  
+  Cabin (Cabine): Número de cabine
+  
+  Embarked (Embarque): Porto de Embarque (C = Cherbourg, Q=Queenstown, S = Southampton)
+  
+  A Segunda parte, test, possui 418 observações e as mesmas variáveis, com exceção da coluna "Survived". Os dados dessa coluna serão estimados ao final do relatório como resultado do modelo construído.  
+  
+```{r include=FALSE}
+# Mudando a categoria das colunas
+
+library(readr)
+train <- read_csv("Projeto Titanic/train.csv")
+
+library(tibble)
+library(dplyr)
+train <- as.tibble(train)
+train <- train %>%
+            mutate(PassengerId = as.character(train$PassengerId),
+            Survived = as.factor(train$Survived),
+            Pclass = as.factor(train$Pclass),
+            Sex = as.factor(train$Sex),
+            Age = as.numeric(train$Age),
+            SibSp = as.numeric(train$SibSp),
+            Parch = as.numeric(train$Parch),
+            Fare = as.numeric(train$Fare),
+            Embarked = as.character(train$Embarked))
+
+
+# Estatísticas descritivas
+
+summary(train)
+head(train)
+length(train$PassengerId)
+library(ggplot2)
+
+  SexoClasse1 <- ggplot(train) +
+                 aes(x = Sex, fill = Pclass) +
+                 geom_bar() +
+                 scale_fill_hue() +
+                 labs(x = "Sexo", y = "Contagem", title = "Perfil dos Passageiros ", subtitle = "Momento do embarque", fill = "Classes") +
+                 theme_minimal()
+  
+  SexoClasse2 <- train %>%
+                filter(Survived %in% "1") %>%
+                ggplot() +
+                aes(x = Sex, fill = Pclass) +
+                geom_bar() +
+                scale_fill_hue() +
+                labs(x = "Sexo", y = "Contagem", title = "Perfil dos Passageiros", subtitle = "Sobreviventes", fill = "Classes") +
+                theme_minimal()
+
+```
+  
+  Falar sobre informações sem entender como esse banco de dados se comporta pode ser um pouco confuso e até contraintuitivo, portanto, a análise gráfica irá guiar esse processo investigativo. Vamos olhar para esses dados sob a ótica de alguns gráficos, e assim, extrair informações que possam ser relevantes para a construção do modelo proposto.
+  
+  No grafico abaixo, vamos analisar as variáveis "Sex", "Pclass", e "Survived" no momento do embarque e o perfil dos sobreviventes.
+  
+```{r echo=FALSE}
+
+library(patchwork)
+  
+  SexoClasse1 + SexoClasse2 + plot_layout(ncol = 1)
+
+```
+  
+  É notada uma grande diferença na dinâmica dos sexos. No primeiro momento, a embarcação é majoritariamente masculina, e no perfil dos sobreviventes, isso se inverte. O que faz sentido, se pensarmos na ordem de prioridade de salvamento em acidentes: Mulheres, crianças e idosos podem ter sido colocados em lugar de prioridade. É notável também uma diminuição expressiva entre os passageiros da terceira classe, expresso pela cor azul.
+  
+  Pensando em ordem de prioridade, é interessante darmos atenção à variável idade, e ver o que ela tem a nos dizer nesse cenário.
+  
+```{r include=FALSE}
+library(ggplot2)
+
+  Idade1 <- train %>%
+              filter(!is.na(Age)) %>%
+              ggplot() +
+              aes(x = Age) +
+              geom_histogram(bins = 30L, fill = "#0c4c8a") +
+              labs(x = "Idade", y = "Contagem", title = "Idade dos Passageiros", subtitle = "Momento do embarque") +
+              theme_minimal()
+
+
+  Idade2 <- train %>%
+              filter(Survived %in% "1") %>%
+              filter(!is.na(Age)) %>%
+              ggplot() +
+              aes(x = Age) +
+              geom_histogram(bins = 30L, fill = "#0c4c8a") +
+              labs(x = "Idade", y = "Contagem", title = "Idade dos Passageiros", subtitle = "Sobreviventes") +  
+              theme_minimal()
+
+```
+  
+```{r echo=FALSE}
+library(patchwork)
+  Idade1 +  Idade2 + plot_layout(ncol = 1)
+
+```
+  
+  É preciso dedicar um pouco de atenção ao analisar esse gráfico. Visualmente, ele parece não apresentar mudanças significativas como o gráfico anterior, mas, se olharmos com atenção, podemos observar que o eixo vertical, "contagem", possui grandezas diferentes entre o momento do embarque e o perfil dos sobreviventes, logo, a contagem de passageiros é muito menor no segundo momento. Como a grande massa de passageiros e tripulantes se concentra entre 20 e 40 anos, é intuitivo dizer que, proporcionalmente, os adultos dessa idade foram os maiores afetados. Buscando uma relação com o gráfico anterior, podemos interpreta-los dizendo que, as maiores vítimas foram homens entre 20 e 40 anos. Dadas as maiores discrepâncias de cada gráfico. Outro ponto interessante de se observar, é que as extremidades sofreram menores alterações, reforçando a suposição que mulheres, crianças e idosos podem ter tido prioridade na ordem de salvamento. Aqui, cabe uma curiosidade importante: O passageiro mais velho do Titanic sobrevieu ao náufrago. O Mr. Algernon Henry Wilson, era um senhor de 80 anos que viajava de primeira classe. Essa informação pode ser observada no grafico acima, no histograma das idades. O passageiro mais novo também sobreviveu. Thomas Alexander era um bebê de 5 mêses, que viajava de terceira classe com apenas um parente à bordo.
+  
+  Vamos agora olhar as estatísticas descritivas básicas de cada variável:
+  
+```{r echo=FALSE}
+summary(train)
+
+```
+  
+  Esse quadro descritivo nos dá uma informação resumida sobre como os nossos dados estão distribuídos. Lembrando que, os dados analisados até aqui, dizem respeito apenas ao conjunto de dados "train", e não à tripulação completa. Dito isso, podemos observar, por exemplo, que sobreviveram 342 pessoas das 891 observadas. É possivel ver que o maior número de pessoas pertencia a terceira classe de embarcação, somando 491 pessoas. 314 pessoas, entre passageiros e tripulantes, eram do sexo feminino. A idade média da tripulação era de 29 anos. E assim, olhando detalhadamente, coluna por coluna, conseguimos extrair informações, que talvez, não tenham sido apresentadas de maneira clara nos gráficos.
+  
+  Uma observação interessante acontece na coluna Age. A idade apresenta uma observação diferente das demais, a contagem de 177 NA's. Esse dado indica que, das 891 observações, 177 não foram computadas na coluna idade. Essa informação pode ter se perdido por diversos fatores, e como resultado, nos entrega uma informação deficiente que pode influenciar negativamente o resultado do nosso modelo. Os valores ausentes, representam 8% do volume total do nosso conjunto de dados, por ser um valor relativamente baixo, é plausível que criemos estimativas para preencher os dados faltantes.
+  
+```{r include=FALSE}
+
+library(mice)    
+library(tibble)  
+library(dplyr)
+  
+  imp <- train
+  
+  imp <- imp %>% # Modificando as classes das variáveis
+    mutate(PassengerId = as.integer(imp$PassengerId),
+           Survived = as.integer(imp$Survived),
+           Pclass = as.integer(imp$Pclass),
+           Name = as.character(imp$Name),
+           Sex = as.character(imp$Sex),
+           Age = as.numeric(imp$Age),
+           SibSp = as.integer(imp$SibSp),
+           Parch = as.integer(imp$Parch),
+           Ticket = as.double(imp$Ticket),
+           Fare = as.numeric(imp$Fare),
+           Cabin = as.double(imp$Cabin),
+           Embarked = as.character(imp$Embarked)
+           
+    )
+  
+  glimpse(imp)
+  
+  
+  
+  init <- mice(data = imp, maxit = 0)
+  meth <- init$method
+  predM <- init$predictorMatrix
+
+  head(imp) 
+  
+  # Definindo o metodo de execução
+  names(imp)
+  
+  meth[c(3:12)] = "cart" #Árvore de classificação e regressão
+  
+  imputed <- mice(imp, method = meth %>% as.vector(), predictorMatrix = predM, m=5)
+  
+  imp1 <- complete(imputed, 1)
+  imp2 <- complete(imputed, 2)
+  imp3 <- complete(imputed, 3)
+  imp4 <- complete(imputed, 4)
+  imp5 <- complete(imputed, 5)
+
+library(finalfit)
+  missing_glimpse(imp1)%>% 
+    DT::datatable()
+  
+# montando o novo dataframe completo
+# função de moda para variáveis categoricas
+  
+  mode <- function(v) {
+    uniqv <- unique(v)
+    uniqv[which.max(tabulate(match(v, uniqv)))]
+  }
+  
+  train_completo <- data.frame(PassengerId = train$PassengerId,
+    Survived = train$Survived,
+    Pclass = apply(cbind(imp1$Pclass, imp2$Pclass, imp3$Pclass, imp4$Pclass, imp5$Pclass), 1, mode),
+    Sex = apply(cbind(imp1$Sex, imp2$Sex, imp3$Sex, imp4$Sex, imp5$Sex), 1, mode),
+    Age = apply(cbind(imp1$Age, imp2$Age, imp3$Age, imp4$Age, imp5$Age),1, mean),
+    SibSp = apply(cbind(imp1$SibSp, imp2$SibSp, imp3$SibSp, imp4$SibSp, imp5$SibSp),1, mean),
+    Parch = apply(cbind(imp1$Parch, imp2$Parch, imp3$Parch, imp3$Parch, imp5$Parch),1, mean),
+    Fare = train$Fare)
+```
+  
+  Através do método Arvores de Classificação e Regressão, nosso modelo conseguiu preencher todos os valores ausentes. Matematicamente, foi feita uma operação linear com essas matrizes e os valores foram imputados levando em consideração a influencia de todas as variáveis envolvidas. O algorítmo usado nessa implementação pode ser consultado no meu perfil do [Github](https://github.com/Er1ckAraujo/Projeto-Titanic). Sempre visando preservar os dados originais, criei um novo banco de dados chamado "train_completo". Removi também algumas colunas que não eram interessantes no nosso processo analítico, restando apenas "PassengerId"; "Survived"; "Pclass"; "Sex"; "Age"; "SibSp"; "Parch" e "Fare".
+  
+  Vamos analisar graficamente a qualidade da nossa imputação:
+  
+```{r echo=FALSE}
+library(tidyr)
+  grafico_imput = function(real,imputado,x){
+    data.frame("Antes de imputar" = real,
+               "Depois de imputar" = imputado) %>% 
+                pivot_longer(everything()) %>% 
+                na.omit() %>% 
+                ggplot(mapping = aes(value,col= name))+
+                geom_density()+
+                theme_minimal()+
+                xlab(x)+
+                ylab("Densidade")+
+                theme(panel.border = element_rect(colour = "black", fill = NA, size = 0.2))+
+                scale_color_discrete(labels = c("Antes de imputar","Depois de imputar"))+
+                guides(color=guide_legend(title=""))
+    
+  } 
+
+
+grafico_imput(train$Age, train_completo$Age, "Age")
+
+
+```
+  
+  Podemos observar uma diferença na densidade das idades de 20 a 40 anos, o que representa o comportamento do conjunto de dados imputado. Como as curvas são parecidas, podemos concluir que a imputação apresenta um resultado plausível.
+  
+  Vamos agora implementar de fato um modelo que nos retorne probabilidades de sobrevivência. Para ilustrar esse cenário, usaremos uma uma árvore de decisões.
+
+```{r include=FALSE}
+train_completo <- train_completo %>% #mudando a categoria de algumas variáveis
+  mutate(Pclass = as.factor(train_completo$Pclass),
+         Sex = as.factor(train_completo$Sex))
+
+```
+
+```{r echo=FALSE}
+library(rpart)
+library(rpart.plot)
+
+arvore <- rpart(Survived~Pclass+Sex+Age, method = "class", data = train_completo)
+
+rpart.plot(arvore)
+
+```
+
+  A interpretação da árvore de probabilidades é bem intuitiva. No topo, vemos que 38% das pessoas sobreviveram, e representam o total da base (100%). O primeiro nó que separa os sobreviventes é a variável Sex. A esquerda, na alternativa "yes", podemos ver que apenas 19% dos homens sobreviveram, e eles representam 65% dos passageiros. A interpretação pode continuar dessa forma recurssivamente. A árvore apresenta apenas os sobreviventes. O valor central de cada quadro mostra a sobrevivência desse indivíduo em porcentagem, o valor logo abaixo, representa a porcentagem que esse indivíduo representa em relação ao total de passageiros. Por, exemplo, se analisarmos o primeiro quadro, da direita para a esquerda, veremos uma mulher, da terceira classe, que 95% das pessoas com esse perfil sobreviveu, e representa 19% do total da base.
+  
+  Vamos aos resultados do nosso modelo ajustado:
+```{r include=FALSE}
+modelo <- glm(Survived~Pclass+Sex+Age+SibSp+Parch+Fare, data = train_completo,
+              family = binomial(link="logit"))
+summary(modelo)
+
+```
+  
+```{r echo=FALSE}
+anova(modelo, test = "Chisq")
+
+```
+
+  Esse quadro apresenta de maneira analítica os resultados do nosso modelo em uma análise de variância (ANOVA). Na coluna "Pr(>Chi)" podemos analisar a influência de cada variável no nosso modelo, quanto maior for a quantidade de asteriscos (***), com maior segurança poderemos afirmar que aquela variável exerceu influência sobre o modelo ajustado.
+  
+   As variáveis explicativas Parch e Fare, possuem um p-valor muito alto, o que indica baixa influência no resultado do nosso modelo, porém, quando ajustei um modelo sem a presença das duas, o modelo apresentou um aumento na variância, o que é negativo para o nosso modelo. Para um modelo bem ajustado, buscamos uma variância com o menor valor possível. A variância representa o quão distante cada valor do conjunto está da média, logo, buscamos uma variância mínima. Na tabela, a menor variância pode ser observada ao final da coluna "Resid. Dev". 
+   
+   Para testar o nosso modelo no banco de dados "test", é necessário repetir o procedimento de imputação de dados, visto que o conjunto de dados a ser testado também possui dados ausentes.
+   
+```{r include=FALSE}
+
+library(readr)
+test <- read_csv("Projeto Titanic/test.csv")
+
+summary(test)
+
+library(mice)    
+library(tibble)  
+library(dplyr)
+
+impp <- test
+
+impp <- impp %>% # Modificando as classes das variáveis
+  mutate(PassengerId = as.integer(impp$PassengerId),
+         Pclass = as.integer(impp$Pclass),
+         Name = as.character(impp$Name),
+         Sex = as.character(impp$Sex),
+         Age = as.numeric(impp$Age),
+         SibSp = as.integer(impp$SibSp),
+         Parch = as.integer(impp$Parch),
+         Ticket = as.double(impp$Ticket),
+         Fare = as.numeric(impp$Fare),
+         Cabin = as.double(impp$Cabin),
+         Embarked = as.character(impp$Embarked))
+
+glimpse(impp)
+
+init2 <- mice(data = impp, maxit = 0)
+meth2 <- init2$method
+predM2 <- init2$predictorMatrix
+
+head(impp)
+
+# Definindo o método de execução
+
+names(impp)
+
+meth2[c(2:11)] = "cart" #Árvore de classificação e regressão
+
+imputedd <- mice(impp, method = meth2 %>% as.vector(), predictorMatrix = predM2, m=5)
+
+impp1 <- complete(imputedd, 1)
+impp2 <- complete(imputedd, 2)
+impp3 <- complete(imputedd, 3)
+impp4 <- complete(imputedd, 4)
+impp5 <- complete(imputedd, 5)
+
+library(finalfit)
+missing_glimpse(impp3)%>% 
+  DT::datatable()
+
+# montando o novo dataframe completo
+head(test)
+
+test_completo <- tibble(PassengerId = test$PassengerId,
+                            Pclass = test$Pclass,
+                            Sex = test$Sex,
+                            Age = apply(cbind(impp1$Age, impp2$Age, impp3$Age, impp4$Age, impp5$Age),1, mean),
+                            SibSp = test$SibSp,
+                            Parch = test$Parch,
+                            Fare = apply(cbind(impp1$Fare, impp2$Fare, impp3$Fare, impp4$Fare, impp5$Fare),1, mean))
+
+```
+   
+   Procedimentos feitos, vamos analisar o reultado final do nosso modelo:
+   
+```{r echo=FALSE}
+test_completo <- test_completo %>%
+  mutate(PassengerId = as.character(PassengerId),
+         Pclass = as.factor(Pclass),
+         Sex = as.factor(Sex))
+
+test_completo$SurviveId <- predict(modelo, newdata = test_completo, type = "response")
+
+test_completo$Survive <- ifelse(test_completo$SurviveId>0.5,1,0)
+
+head(test_completo)
+
+
+```
+   
+   Apliquei uma função que nos retorna as primeiras 6 linhas da nossa tabela. A coluna "SurviveId" é a coluna cujo qual foi aplicado o nosso modelo, ela contem resultados de 0 a 1 e que representam as probabilidades de sobrevivência de cada passageiro. O Keagle, exige que os dados, na sua submissão, sejam fornecidos em formato binário (0 ou 1).Baseado nisso, construí uma nova coluna chamada "Survive", essa por sua vez, possui apenas dois valores, 0 e 1. Para aqueles indivíduos que possuem probabilidade de sobreviência maior que 0.5 (50%) a coluna Survive retorna 1,  e para aqueles que possuem probabilidade de sobrevivência menor que 0.5, a coluna Survive retorna 0.
+   
+### Conclusão
+  
+  O resultado desse modelo foi submetido à plataforma keagle e, a partir dele, conseguimos prever corretamente 75% dos resultados. É um bom resultado, porém, o mesmo se torna menos relevante se observarmos que uma quantidade significativa de participantes conseguiram prever 100% dos resultados. O modelo pode ser refinado e trabalhado para aumento da sua acurácia. Contudo, é um bom projeto para iniciar nesse imenso e poderoso mundo da Ciência de Dados.
